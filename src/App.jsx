@@ -10,6 +10,7 @@ const GET_ROOMS = gql(/* GraphQL */`
             days
             section_id
             start_date
+            end_date
             start_seconds
             end_seconds
         }
@@ -22,6 +23,7 @@ const GET_COURSE = gql(/* GraphQL */`
             section_name
             course {
                 name
+                code
             }
         }
     }
@@ -49,11 +51,22 @@ const getCurrentDayOfWeek = () => {
 
 const filterResults = (data, day) => {
   if(!data) return data
-  const startDates = data.section_meeting
-    .map((meeting) => meeting.start_date)
-    .sort((a, b) => new Date(a) - new Date(b))
-  const lastStartDate = startDates[startDates.length - 1]
-  return data.section_meeting.filter((meeting) => meeting.days.includes(day) && meeting.start_date === lastStartDate)
+  const currentDate = new Date()
+  return data.section_meeting.filter(
+    (meeting) => meeting.days.includes(day) &&
+      new Date(meeting.start_date) <= currentDate &&
+      new Date(meeting.end_date) >= currentDate
+  )
+}
+
+const formatCode = (roomOrCode) => {
+  const formattedRoom = roomOrCode.toUpperCase().trim()
+  if (!formattedRoom.includes(" ")){
+    const firstDigitPosition = formattedRoom.search(/\d/)
+    if (firstDigitPosition === -1) return formattedRoom
+    return formattedRoom.slice(0, firstDigitPosition) + " " + formattedRoom.slice(firstDigitPosition)
+  }
+  return formattedRoom
 }
 
 function App() {
@@ -74,13 +87,14 @@ function App() {
               ...prev,
               [meeting.section_id]: {
                 course: result.data.course_section_by_pk.course.name,
-                type: result.data.course_section_by_pk.section_name
+                type: result.data.course_section_by_pk.section_name,
+                code: formatCode(result.data.course_section_by_pk.course.code.toUpperCase()),
               }
             }))
           }
         )
       })
-  }, [data])
+  }, [data, day])
   return (
     <>
       <Stack spacing={"lg"}>
@@ -107,13 +121,18 @@ function App() {
             <Button
               variant="gradient"
               gradient={{from: '#ed6ea0', to: '#ec8c69', deg: 35}}
-              onClick={() => setSearchRoom(room)}
+              onClick={() => {
+                const formattedRoom = formatCode(room)
+                setSearchRoom(formattedRoom)
+                setRoom(formattedRoom)
+              }}
             >Search</Button>
           </Grid.Col>
         </Grid>
         <Table verticalSpacing="md" horizontalSpacing="md">
           <thead>
           <tr>
+            <th>Code</th>
             <th>Course</th>
             <th>Section</th>
             <th>Start</th>
@@ -124,6 +143,7 @@ function App() {
           {data && filterResults(data, day)
             .map((meeting) => (
               <tr key={meeting.section_id}>
+                <td style={{textAlign: "left"}}>{sectionToCourse[meeting.section_id] && sectionToCourse[meeting.section_id].code}</td>
                 <td style={{textAlign: "left"}}>{sectionToCourse[meeting.section_id] && sectionToCourse[meeting.section_id].course}</td>
                 <td>{sectionToCourse[meeting.section_id] && sectionToCourse[meeting.section_id].type}</td>
                 <td>{secondToTime(meeting.start_seconds)}</td>
