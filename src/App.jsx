@@ -19,6 +19,7 @@ const GET_ROOMS = gql(/* GraphQL */`
 const GET_COURSE = gql(/* GraphQL */`
     query GetCourse($section: Int!) {
         course_section_by_pk(id: $section) {
+            section_name
             course {
                 name
             }
@@ -46,6 +47,15 @@ const getCurrentDayOfWeek = () => {
   }
 }
 
+const filterResults = (data, day) => {
+  if(!data) return data
+  const startDates = data.section_meeting
+    .map((meeting) => meeting.start_date)
+    .sort((a, b) => new Date(a) - new Date(b))
+  const lastStartDate = startDates[startDates.length - 1]
+  return data.section_meeting.filter((meeting) => meeting.days.includes(day) && meeting.start_date === lastStartDate)
+}
+
 function App() {
   const [room, setRoom] = useState("")
   const [searchRoom, setSearchRoom] = useState("")
@@ -53,16 +63,19 @@ function App() {
   const {data, loading} = useQuery(GET_ROOMS, {variables: {room: searchRoom}, skip: !searchRoom})
   const [fetchCourseName] = useLazyQuery(GET_COURSE);
   const [sectionToCourse, setSectionToCourse] = useState({});
+
   useEffect(() => {
     if (loading || !data) return
-    data.section_meeting
-      .filter((meeting) => meeting.days.includes(day) && meeting.start_date === "2023-05-08")
+    filterResults(data, day)
       .forEach((meeting) => {
         fetchCourseName({variables: {section: meeting.section_id}}).then(
           (result) => {
             setSectionToCourse((prev) => ({
               ...prev,
-              [meeting.section_id]: result.data.course_section_by_pk.course.name
+              [meeting.section_id]: {
+                course: result.data.course_section_by_pk.course.name,
+                type: result.data.course_section_by_pk.section_name
+              }
             }))
           }
         )
@@ -108,12 +121,11 @@ function App() {
           </tr>
           </thead>
           <tbody>
-          {data && data.section_meeting
-            .filter((meeting) => meeting.days.includes(day) && meeting.start_date === "2023-05-08")
+          {data && filterResults(data, day)
             .map((meeting) => (
               <tr key={meeting.section_id}>
-                <td style={{textAlign: "left"}}>{sectionToCourse[meeting.section_id]}</td>
-                <td>{meeting.section_id}</td>
+                <td style={{textAlign: "left"}}>{sectionToCourse[meeting.section_id] && sectionToCourse[meeting.section_id].course}</td>
+                <td>{sectionToCourse[meeting.section_id] && sectionToCourse[meeting.section_id].type}</td>
                 <td>{secondToTime(meeting.start_seconds)}</td>
                 <td>{secondToTime(meeting.end_seconds)}</td>
               </tr>
